@@ -171,3 +171,90 @@ function Save-Tasks {
     Write-Error "Détails de l'erreur : $($_.Exception.ToString())"
   }
 }
+
+
+## Fonctions principales
+
+#Fonction d'ajout d'une tâche
+function Add-Task {
+  [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName='Default')]
+  [Alias('at')]
+  param(
+    [Parameter(Mandatory=$true, Position=0)]
+    [ValidateNotNullOrEmpty()]
+    [string]$Title, # Titre de la tâche (obligatoire & unique)
+
+    [Parameter(ParameterSetName='WithDueDate')]
+    [Parameter(ParameterSetName='Default')]
+    $DueDate, # Date d'échéance de la tâche (optionnelle)
+
+    [Parameter(ParameterSetName='Default')]
+    [Parameter(ParameterSetName='WithDueDate')]
+    [TaskPriority]$Priority = [TaskPriority]::Normal,
+
+    [Parameter(ParameterSetName='Default')]
+    [Parameter(ParameterSetName='WithDueDate')]
+    [string[]]$Tags, # Liste de tags associés à la tâche (optionnelle)
+    
+    [Parameter(ParameterSetName='Default')]
+    [Parameter(ParameterSetName='WithDueDate')]
+    [string]$Description, # Description de la tâche (optionnelle)
+
+    [Parameter(ParameterSetName='Default')]
+    [switch]$DueTomorrow, # Indique si la tâche est due demain (optionnelle)
+
+    [Parameter(ParameterSetName='Default')]
+    [switch]$DueNextWeek, # Indique si la tâche est due la semaine prochaine (optionnelle)
+
+    [Parameter(ParameterSetName='Default')]
+    [switch]$NoDefaultDueDate
+  )
+
+  $existingTask = $script:TaskList | Where-Object {
+    $_.Title -eq $Title -and -not $_.Completed
+  }
+
+  if ($existingTask) {
+    Write-Error "Une tâche avec le titre '$Title' existe déjà et n'est pas terminée."
+    return $existingTask
+  }
+
+  $task = [PSTask]::new()
+  $task.Id = $script:NextTaskId++
+  $task.Title = $Title
+
+  if ($DueDate) {
+    try {
+      $task.DueDate = [datetime]$DueDate
+    } catch {
+      Write-Warning "Format de la date invalide."
+      return
+    }
+  } elseif ($DueTomorrow) {
+    $task.DueDate = (Get-Date).AddDays(1).Date
+  } elseif ($DueNextWeek) {
+    $task.DueDate = (Get-Date).AddDays(7).Date
+  } elseif (-note $NoDefaultDueDate) {
+    $task.DueDate = (Get-Date).Date # Date d'échéance par défaut à aujourd'hui
+  }
+
+  $task.Priority = $Priority
+  if ($Tags) { $task.Tags = $Tags }
+  if ($Description) { $task.Description = $Description }
+
+  if ($PSCmdlet.ShouldProcess($Title, "Ajout d'une tâche")) {
+    $script:TaskList = @($script:TaskList) + @($task) # Ajoute la tâche à la liste
+    Save-Tasks
+
+    $dueInfo = if ($task.DueDate) {
+      " (échéance : $($task.DueDate.ToString('dd/MM/yyyy')))"
+    } else {
+      " (aucune échéance)"
+    }
+
+    Write-Host "✅ Tâche #$($task.Id) ajoutée : " -NoNewline -ForegroundColor Green
+    Write-Host $Description -NoNewline -ForegroundColor White
+    Write-Host $dueInfo -ForegroundColor DarkGray
+    return $task
+  }
+}
