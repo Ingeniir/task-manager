@@ -130,3 +130,44 @@ function Initialize-TaskManager {
     $script:NextTaskId = 1
   }
 }
+
+# Fonction de sauvegarde des tâches
+function Save-Tasks {
+  [CmdletBinding(SupportsShouldProcess)]
+  param()
+
+  try {
+    if ($PSCmdlet.ShouldProcess("Fichier de tâches", "Sauvegarde")) {
+      $taskDir = Split-Path $script:TaskFilePath -Parent
+      if (-not (Test-Path $taskDir)) {
+        New-Item -Path $taskDir -ItemType Directory -Force | Out-Null
+      }
+
+      # Préparation des données pour la sauvegarde
+      $dataToSave = @()
+      foreach ($task in $script:TaskList) {
+        $taskData = @{
+          Id = $task.Id
+          Title = $task.Title
+          CreatedAt = $task.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss") # Format ISO 8601
+          DueDate = if ($task.DueDate -ne [datetime]::MinValue) { $task.DueDate.ToString("yyyy-MM-ddTHH:mm:ss") } else { "" }
+          Completed = $task.Completed
+          Priority = $task.Priority.ToString()
+          Tags = $task.Tags
+          Description = $task.Description
+          TimeSpent = $task.TimeSpent.ToString()
+        }
+        $dataToSave += $taskData
+    }
+
+    $jsonContent = $dataToSave | ConvertTo-Json -Depth 5 -Compress:$false # Convertit en format JSON
+    $jsonContent | Out-Fil $script:TaskFilePath -Encoding UTF8 -Force # Sauvegarde dans le fichier
+
+    Write-Verbose "Sauvegardé $($script:TaskList.Count) tâches dans le fichier $script:TaskFilePath"
+  }
+  } catch {
+    Write-Error "Erreur lors de la sauvegarde des tâches : $($_.Exception.Message)"
+    Write-Error "Chemin du fichier : $script:TaskFilePath"
+    Write-Error "Détails de l'erreur : $($_.Exception.ToString())"
+  }
+}
